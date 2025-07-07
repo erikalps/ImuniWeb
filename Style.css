@@ -4,12 +4,19 @@
   padding: 0;
   box-sizing: border-box;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+
 }
 
 /* Fundo geral com gradiente verde suave */
+
+.img_topo{
+  width:200px;
+  height: 200px;
+  object-fit: cover;
+  border-radius: 50%;
+}
 body {
-  background-image: url(background.png);
-  color: #2f4f4f;
+  background: linear-gradient(100deg, #87c788,#53b679, #87c788);
   min-height: 100vh;
   display: flex;
   flex-direction: column;
@@ -25,6 +32,8 @@ header {
 }
 
 header h1 {
+  text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.5);
+  color:#fff;
   font-size: 2.5em;
 }
 

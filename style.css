@@ -233,8 +233,6 @@ header {
   margin-bottom: 2.25rem;
 }
 
-.stats { display: flex; gap: 2rem; flex-wrap: wrap; }
-.stat  { display: flex; flex-direction: column; }
 
 .sn {
   font-family: 'Syne', sans-serif;

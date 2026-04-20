@@ -1,45 +1,147 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="pt-BR">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Navegue pela Imunização</title>
-    <link rel="stylesheet" href="Style.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>ImuniWeb — Navegue pela Imunização</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;1,9..40,300&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="style.css" />
 </head>
 <body>
-    <header>
-      <div>
-        <img src="img/ChatGPT Image 7 de jul. de 2025, 18_19_42.png" alt="" class="img_topo">
+
+  <!-- ── HEADER ── -->
+  <header>
+    <div class="logo">
+      <div class="logo-pill">💉</div>
+      ImuniWeb
+    </div>
+    <nav class="nav-tabs">
+      <button class="nav-tab active" data-page="consulta">Consulta</button>
+      <button class="nav-tab" data-page="timeline">Timeline</button>
+      <button class="nav-tab" data-page="caderneta">Caderneta</button>
+    </nav>
+    <div class="badge-sus">SUS · PNI</div>
+  </header>
+
+  <!-- ── HERO ── -->
+  <section class="hero">
+    <div class="hero-bg">
+      <div class="hero-bg-grid"></div>
+      <div class="hero-bg-circle1"></div>
+      <div class="hero-bg-circle2"></div>
+    </div>
+    <div class="hero-inner">
+      <div class="eyebrow">Calendário Nacional de Vacinação</div>
+      <h1>Navegue pela<br><em>Imunização</em></h1>
+      <p class="hero-sub">
+        Consulte vacinas obrigatórias e recomendadas pelo PNI/MS de acordo
+        com sua faixa etária. 
+      </p>
+      <div class="stats">
+        <div class="stat"><span class="sn">20+</span><span class="sl">Vacinas</span></div>
+        <div class="sdiv"></div>
+        <div class="stat"><span class="sn">8</span><span class="sl">Faixas etárias</span></div>
+        <div class="sdiv"></div>
+        <div class="stat"><span class="sn">100%</span><span class="sl">Gratuito</span></div>
+        <div class="sdiv"></div>
+        <div class="stat"><span class="sn">SUS</span><span class="sl">Rede pública</span></div>
       </div>
-      <h1>Navegue pela Imunização</h1>
-    </header>
+    </div>
+  </section>
 
-     <section id="caixaIdade">
-       <div class="input-idade">
-            <input type="number" id="idade" name="idade" min="0" required placeholder="Digite sua idade"> 
-                    
-          <div class="radio">
-             <label for="meses">   Meses
-               <input type="radio" id="meses" name="mes_ano" value="mes">
-            </label>
-                    
-            <label for="anos">  Anos
-               <input type="radio" id="anos" name="mes_ano" value="ano">
-             </label>
-          </div> <!--radio-->
-            <button type="button" id="verificar" onclick="verificarVacinas()">Verificar Vacinas</button>
-       </div> <!--input-idade-->
-     </section> <!--caixa-idade-->
-            
-    <div id="res" class="resultado-scroll"></div>
+  <!-- ── MAIN ── -->
+  <main class="views">
 
-     <div id="sidebar" class="sidebar">
-          <div id="infoVac"></div>
-                <button onclick="fecharSidebar()">Fechar</button>
-         
-           </div>
+    <!-- PAGE: CONSULTA -->
+    <div class="page active" id="page-consulta">
+
+      <div class="card">
+        <div class="card-head">
+          <div class="pulse-dot"></div>
+          Consultar por idade
         </div>
+        <div class="irow">
+          <div class="iw">
+            <span class="ilabel">Idade</span>
+            <input type="number" id="idadeInput" class="inum" min="0" placeholder="0" />
+          </div>
+          <div>
+            <span class="ilabel">Unidade</span>
+            <div class="toggle">
+              <button class="tbtn active" id="btnM">Meses</button>
+              <button class="tbtn" id="btnA">Anos</button>
+            </div>
+          </div>
+          <button class="btn-go" id="btnVerificar">
+            <span>Verificar</span>
+            <span class="arr">→</span>
+          </button>
+        </div>
+        <div class="legend">
+          <div class="leg"><div class="ldot ob"></div>Obrigatória</div>
+          <div class="leg"><div class="ldot rec"></div>Recomendada</div>
+        </div>
+      </div>
 
-<script src="script.js"></script>
+      <div id="filterArea" class="hidden">
+        <div class="search-wrap">
+          <span class="search-ico">🔍</span>
+          <input class="search-inp" id="searchInp" placeholder="Buscar vacina ou doença…" />
+        </div>
+        <div class="filter-row">
+          <button class="fpill active" data-filtro="todos">Todas</button>
+          <button class="fpill ob"     data-filtro="ob">Obrigatórias</button>
+          <button class="fpill rec"    data-filtro="rec">Recomendadas</button>
+        </div>
+      </div>
+
+      <div id="resultsArea"></div>
+    </div>
+
+    <!-- PAGE: TIMELINE -->
+    <div class="page" id="page-timeline">
+      <div class="card">
+        <div class="card-head">📅 Calendário completo por fase</div>
+        <p class="card-desc">
+          Todas as vacinas organizadas por faixa etária, do nascimento à
+          terceira idade. Toque em qualquer vacina para ver detalhes.
+        </p>
+      </div>
+      <div class="timeline" id="timelineContainer"></div>
+    </div>
+
+    <!-- PAGE: CADERNETA -->
+    <div class="page" id="page-caderneta">
+      <div class="cad-info">
+        <h3>Minha Caderneta Virtual</h3>
+        <p>
+          Marque as vacinas que você já tomou para acompanhar sua proteção.
+          Os dados ficam salvos nesta sessão.
+        </p>
+      </div>
+      <div id="progressArea"></div>
+      <div class="cad-check-list" id="cadList"></div>
+    </div>
+
+  </main>
+
+  <!-- ── OVERLAY ── -->
+  <div class="overlay" id="overlay"></div>
+
+  <!-- ── DRAWER ── -->
+  <aside class="drawer" id="drawer" aria-hidden="true">
+    <div class="dhead">
+      <div>
+        <div class="dtype" id="dType"></div>
+        <div class="dtitle" id="dTitle"></div>
+      </div>
+      <button class="btn-close" id="btnFechar" aria-label="Fechar">✕</button>
+    </div>
+    <div class="dbody" id="dBody"></div>
+  </aside>
+
+  <script src="script.js"></script>
 </body>
 </html>

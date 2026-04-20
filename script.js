@@ -1,205 +1,567 @@
+/* ═══════════════════════════════════════════════
+   ImuniWeb — script.js
+   Lógica: consulta, timeline, caderneta, drawer
+   ═══════════════════════════════════════════════ */
+
+'use strict';
+
+// ── ESTADO ──────────────────────────────────────
+let unidade         = 'meses';   // 'meses' | 'anos'
+let filtroAtivo     = 'todos';   // 'todos' | 'ob' | 'rec'
+let vacinasResult   = [];        // resultado da última consulta
+let caderneta       = {};        // { [id]: boolean }
+
+// ── BASE DE DADOS ────────────────────────────────
+const VACINAS = [
+  {
+    id: 'bcg',
+    nome: 'BCG',
+    tipo: 'ob',
+    protege: 'Tuberculose meníngea e miliar',
+    doses: ['Dose única ao nascer'],
+    rec: 'Aplicada preferencialmente na maternidade logo após o nascimento.',
+    faixas: [{ min: 0, max: 1 }],
+    fase: 'Nascimento',
+  },
+  {
+    id: 'hepb',
+    nome: 'Hepatite B',
+    tipo: 'ob',
+    protege: 'Hepatite B viral (doença hepática grave)',
+    doses: ['Ao nascer', '2 meses', '4 meses', '6 meses'],
+    rec: '1ª dose nas primeiras 12h de vida. Demais doses com a pentavalente.',
+    faixas: [{ min: 0, max: 12 }],
+    fase: 'Nascimento',
+  },
+  {
+    id: 'penta',
+    nome: 'Pentavalente (DTP + Hib + HepB)',
+    tipo: 'ob',
+    protege: 'Difteria, tétano, coqueluche, meningite por Hib e Hepatite B',
+    doses: ['2 meses', '4 meses', '6 meses'],
+    rec: 'Série primária de 3 doses. Reforços com DTP aos 15 meses e 4 anos.',
+    faixas: [{ min: 2, max: 6 }],
+    fase: 'Primeiros meses',
+  },
+  {
+    id: 'vip',
+    nome: 'VIP (Poliomielite Inativada)',
+    tipo: 'ob',
+    protege: 'Poliomielite — paralisia infantil',
+    doses: ['2 meses', '4 meses', '6 meses'],
+    rec: 'Nas 3 doses primárias. Reforços com VOP oral.',
+    faixas: [{ min: 2, max: 6 }],
+    fase: 'Primeiros meses',
+  },
+  {
+    id: 'rota',
+    nome: 'Rotavírus (VORH)',
+    tipo: 'ob',
+    protege: 'Gastroenterite grave por rotavírus',
+    doses: ['2 meses', '4 meses'],
+    rec: '1ª dose até 3m15d. 2ª dose até 7m29d. Não aplicar fora dessa janela.',
+    faixas: [{ min: 2, max: 7 }],
+    fase: 'Primeiros meses',
+  },
+  {
+    id: 'pnc10',
+    nome: 'Pneumocócica 10-valente',
+    tipo: 'ob',
+    protege: 'Pneumonia, meningite e otite por pneumococo',
+    doses: ['3 meses', '5 meses', 'Reforço 12 meses'],
+    rec: 'Esquema 2+1: duas doses no 1º ano e reforço entre 12–15 meses.',
+    faixas: [{ min: 3, max: 15 }],
+    fase: 'Primeiros meses',
+  },
+  {
+    id: 'menC',
+    nome: 'Meningocócica C',
+    tipo: 'ob',
+    protege: 'Doença meningocócica do sorogrupo C',
+    doses: ['3 meses', '5 meses', 'Reforço 12 meses'],
+    rec: 'Esquema 2+1 com reforço no 2º ano de vida.',
+    faixas: [{ min: 3, max: 15 }],
+    fase: 'Primeiros meses',
+  },
+  {
+    id: 'fa',
+    nome: 'Febre Amarela',
+    tipo: 'ob',
+    protege: 'Febre amarela (doença viral hemorrágica)',
+    doses: ['9 meses', 'Reforço 4 anos'],
+    rec: 'Uma dose de reforço aos 4 anos. Após os 5 anos: dose única vitalícia.',
+    faixas: [{ min: 9, max: 108 }],
+    fase: '2º semestre de vida',
+  },
+  {
+    id: 'scr',
+    nome: 'Tríplice Viral (SCR)',
+    tipo: 'ob',
+    protege: 'Sarampo, caxumba e rubéola',
+    doses: ['12 meses', '15 meses'],
+    rec: '2 doses para proteção plena. A 2ª dose é a Tetra Viral.',
+    faixas: [{ min: 12, max: 15 }],
+    fase: '1 ano',
+  },
+  {
+    id: 'hepA',
+    nome: 'Hepatite A',
+    tipo: 'ob',
+    protege: 'Hepatite A viral',
+    doses: ['15 meses'],
+    rec: 'Dose única aos 15 meses. Para adultos não vacinados em situação de risco.',
+    faixas: [{ min: 15, max: 36 }],
+    fase: '1 ano',
+  },
+  {
+    id: 'var',
+    nome: 'Varicela (Tetra Viral)',
+    tipo: 'ob',
+    protege: 'Catapora e suas complicações (pneumonia, encefalite)',
+    doses: ['15 meses'],
+    rec: 'Aos 15 meses como Tetra Viral (SCR + varicela).',
+    faixas: [{ min: 15, max: 24 }],
+    fase: '1 ano',
+  },
+  {
+    id: 'dtpR',
+    nome: 'DTP (Reforços)',
+    tipo: 'ob',
+    protege: 'Difteria, tétano e coqueluche — reforço da imunidade',
+    doses: ['15 meses', '4 anos'],
+    rec: 'Reforços obrigatórios da série iniciada com a pentavalente.',
+    faixas: [{ min: 15, max: 60 }],
+    fase: '1–4 anos',
+  },
+  {
+    id: 'vop',
+    nome: 'VOP (Reforços orais)',
+    tipo: 'ob',
+    protege: 'Poliomielite — reforço oral',
+    doses: ['15 meses', '4 anos'],
+    rec: 'Aplicada como reforço após a série VIP inativada.',
+    faixas: [{ min: 15, max: 48 }],
+    fase: '1–4 anos',
+  },
+  {
+    id: 'hpv',
+    nome: 'HPV Quadrivalente',
+    tipo: 'ob',
+    protege: 'Câncer de colo uterino, verrugas genitais e outros cânceres por HPV',
+    doses: ['1ª dose', '6 meses após (2ª dose)'],
+    rec: 'Meninas 9–14 anos e meninos 11–14 anos. Imunossuprimidos: 3 doses.',
+    faixas: [{ min: 108, max: 180 }],
+    fase: '9–15 anos',
+  },
+  {
+    id: 'menACWY',
+    nome: 'Meningocócica ACWY',
+    tipo: 'rec',
+    protege: 'Doença meningocócica dos sorogrupos A, C, W e Y',
+    doses: ['Dose única', 'Reforço 16 anos'],
+    rec: 'Recomendada a partir dos 11–12 anos com reforço aos 16.',
+    faixas: [{ min: 132, max: 216 }],
+    fase: 'Adolescência',
+  },
+  {
+    id: 'flu',
+    nome: 'Influenza (Gripe)',
+    tipo: 'ob',
+    protege: 'Influenza sazonal A e B',
+    doses: ['Anual (campanha)'],
+    rec: 'Crianças < 9a: 2 doses na 1ª vacinação. Grupos prioritários: crianças 6m–5a, idosos, gestantes e profissionais de saúde.',
+    faixas: [{ min: 6, max: 9999 }],
+    fase: 'Todas as idades',
+  },
+  {
+    id: 'covid',
+    nome: 'Covid-19',
+    tipo: 'ob',
+    protege: 'Doença grave por SARS-CoV-2',
+    doses: ['Esquema primário + reforços anuais'],
+    rec: 'A partir de 6 meses de idade. Seguir calendário vigente do Ministério da Saúde.',
+    faixas: [{ min: 6, max: 9999 }],
+    fase: 'Todas as idades',
+  },
+  {
+    id: 'dtpa',
+    nome: 'dTpa (Gestantes)',
+    tipo: 'ob',
+    protege: 'Proteção do recém-nascido contra coqueluche grave',
+    doses: ['Dose única por gestação'],
+    rec: 'A partir da 20ª semana de cada gestação, independentemente de dose anterior.',
+    faixas: [{ min: 180, max: 600 }],
+    fase: 'Adultos',
+  },
+  {
+    id: 'pnc23',
+    nome: 'Pneumocócica 23-valente',
+    tipo: 'rec',
+    protege: '23 sorotipos de pneumococo',
+    doses: ['1 a 2 doses'],
+    rec: 'Para adultos ≥ 60 anos, imunossuprimidos e portadores de doenças crônicas.',
+    faixas: [{ min: 720, max: 9999 }],
+    fase: 'Idosos (60+)',
+  },
+  {
+    id: 'zoster',
+    nome: 'Zóster (Herpes Zóster)',
+    tipo: 'rec',
+    protege: 'Herpes zóster e neuralgia pós-herpética',
+    doses: ['2 doses com 2–6 meses de intervalo'],
+    rec: 'Recomendada a partir dos 50 anos, especialmente para imunossuprimidos.',
+    faixas: [{ min: 600, max: 9999 }],
+    fase: 'Idosos (50+)',
+  },
+];
+
+// Fases para a timeline (ordem e metadados)
+const FASES = [
+  { label: 'Nascimento',         emoji: '👶', bg: '#e8f4ff', sub: '0 a 1 mês' },
+  { label: 'Primeiros meses',    emoji: '🍼', bg: '#fff3e8', sub: '2 a 9 meses' },
+  { label: '2º semestre de vida',emoji: '🌱', bg: '#e8ffef', sub: '9 a 12 meses' },
+  { label: '1 ano',              emoji: '🎂', bg: '#fff8e8', sub: '12 a 24 meses' },
+  { label: '1–4 anos',           emoji: '🧒', bg: '#f3e8ff', sub: '1 a 4 anos' },
+  { label: '9–15 anos',          emoji: '🧑‍🎓', bg: '#e8f0ff', sub: '9 a 15 anos' },
+  { label: 'Adolescência',       emoji: '🧑', bg: '#ffe8f0', sub: '11 a 18 anos' },
+  { label: 'Adultos',            emoji: '🧑‍💼', bg: '#f0f0f0', sub: '18 a 59 anos' },
+  { label: 'Todas as idades',    emoji: '🌍', bg: '#e8fffd', sub: 'Qualquer faixa' },
+  { label: 'Idosos (50+)',       emoji: '👴', bg: '#ffeaea', sub: 'A partir dos 50 anos' },
+  { label: 'Idosos (60+)',       emoji: '👴', bg: '#fff0e8', sub: 'A partir dos 60 anos' },
+];
 
 
+// ── HELPERS ─────────────────────────────────────
 
-function verificarVacinas(){
-    let idade = document.getElementById('idade').value
-    let res = document.getElementById('res')
-    let mes_ano = document.querySelector('input[name="mes_ano"]:checked')
-   
-    res.innerHTML = ""
+/**
+ * Retorna a idade digitada convertida em meses.
+ * @returns {number|null}
+ */
+function idadeEmMeses() {
+  const raw = document.getElementById('idadeInput').value;
+  const v   = parseInt(raw, 10);
+  if (isNaN(v) || v < 0) return null;
+  return unidade === 'anos' ? v * 12 : v;
+}
 
-  if(Number(idade) < 0 || idade.trim() === ""){
-    res.innerHTML = `<h3>Digite sua idade \u{1F9D0}</h3>`
-   
-  } else if(!mes_ano){
-    res.innerHTML = `<h3>Selecione Meses ou Anos também  \u{1F9D0} </h3>`
- 
-} else{
-    let valor = Number(idade) /*pegar a idade*/
-    let tipoIdade = mes_ano.value /* pegar meses ou anos*/
-   
-    
-    if(valor > 1){
-        res.innerHTML = `<h3>Vacinnas indicadas para ter se tomado até ${valor} ${tipoIdade === "mes" ? "meses" : "anos"}:</h3><ul>`;
-    } else {
-        res.innerHTML = `<h3>Vacinnas indicadas para ter se tomado até ${valor} ${tipoIdade === "mes" ? "mes" : "ano"}:</h3><ul>`;
-    }
-    
-    
-    for (let idadeKey in vacinasPorIdade) {
-      let tipo = idadeKey.endsWith("m") ? "mes" : "ano";
-      let numero = parseInt(idadeKey);
+/**
 
-      if (
-        (tipoIdade === "mes" && tipo === "mes" && numero <= valor) ||
-        (tipoIdade === "ano" && tipo === "ano" && numero <= valor)) {
-          let label = `${numero} ${tipo === "mes" ? (numero > 1 ? "meses" : "mês") : (numero > 1 ? "anos" : "ano")}`;
-          let vacinas = vacinasPorIdade[idadeKey];
-          let resultado = `<div class="txt-idade">${label}</div>`;
-
-          vacinas.forEach(vacina => {
-            resultado += `<div class="vacinas"><button onclick="maisInformacoes('${vacina}')">${todasvacinas[vacina] || vacina}</button></div><br>`;
-          });
-
-          res.innerHTML += `<div class="vacina-bloco">${resultado}</div>`;
-      }
-    }
-  
-    
-    }
+ * @param {number} m
+ * @returns {string}
+ */
+function labelIdade(m) {
+  if (unidade === 'anos') {
+    const anos = Math.floor(m / 12);
+    return `${anos} ano${anos !== 1 ? 's' : ''}`;
+  }
+  return `${m} mês${m !== 1 ? 'es' : ''}`;
 }
 
 
+// ── TOGGLE MESES / ANOS ──────────────────────────
+document.getElementById('btnM').addEventListener('click', () => setUnidade('meses'));
+document.getElementById('btnA').addEventListener('click', () => setUnidade('anos'));
 
-function maisInformacoes(nomeVacina){
-   const info = infoVacinas[nomeVacina] 
-
-   document.getElementById("infoVac").innerHTML = `
-        <h2 class ="titulo_info">${nomeVacina}</h2>
-        <p class ="vacina_info">${info}</p>
-    `;
-
-  document.getElementById("sidebar").classList.add("active");
-   
-}  
-  
-
-
-function fecharSidebar() {
-    document.getElementById("sidebar").classList.remove("active");
+function setUnidade(u) {
+  unidade = u;
+  document.getElementById('btnM').classList.toggle('active', u === 'meses');
+  document.getElementById('btnA').classList.toggle('active', u === 'anos');
 }
 
-/* todas as vacinas*/
 
-const todasvacinas = {
-    bcg: "BCG",
-    hepB: "Hepatite B",
-    pentavalente1: "Pentavalente (1ª dose)",
-    pentavalente2: "Pentavalente (2ª dose)",
-    pentavalente3: "Pentavalente (3ª dose)",
-    poliomelite1: "Poliometile (1ª dose)",
-    poliomelite2: "Poliomelite (2ª dose)",
-    poliomelite3: "Poliomelite (3ª dose)",
-    poliomieliteRef1: "Poliomielite (1º reforço)",
-    poliomieliteRef2: "Poliomielite (2º reforço)",
-    meningococicaC1: "Meningocócica C (1ª dose)",
-    meningococicaC2: "Meningocócica C (2ª dose)",
-    meningococicaRef: "Meningocócica C (reforço)",
-    pneumo1: "Pneumocócica 10 (1ª dose)",
-    pneumo2: "Pneumocócica 10 (2ª dose)",
-    pneumoRef: "Pneumocócica 10 (reforço)",
-    rotavirus1: "Rotavírus (1ª dose)",
-    rotavirus2: "Rotavírus (2ª dose)",
-    tripliceViral1: "Tríplice viral (1ª dose)",
-    tripliceViral2: "Tríplice viral (2ª dose)",
-    hepA: "Hepatite A",
-    tetrasViral: "Tetra viral",
-    dT: "Dupla adulta",
-    febreAmarela: "Febre amarela",
-    hpvMeninas: "HPV (meninas)",
-    hpvMeninos: "HPV (meninos)",
-    meningococicaACWY: "Meningocócica ACWY",
-    dTPreforco: "DTP (reforço)",
-    influenza: "Influenza (vacina anual)",
-    trivalente: "Tríplice viral (reforço)",
-    hepatiteB: "Hepatite B (reforço)",
-    dTadul: "Dupla adulto (reforço)",
-    pneumococica65: "Pneumocócica (idosos)",
-    gripe60: "Influenza (idosos, dose extra)",
-    covid: "Vacina contra COVID-19",
-};
+// ── NAVEGAÇÃO ENTRE PÁGINAS ──────────────────────
+document.querySelectorAll('.nav-tab').forEach(btn => {
+  btn.addEventListener('click', () => {
+    const page = btn.dataset.page;
+
+    document.querySelectorAll('.nav-tab').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+
+    btn.classList.add('active');
+    document.getElementById('page-' + page).classList.add('active');
+
+    if (page === 'timeline')  buildTimeline();
+    if (page === 'caderneta') buildCaderneta();
+  });
+});
 
 
+// ── CONSULTA ────────────────────────────────────
+document.getElementById('btnVerificar').addEventListener('click', verificar);
+document.getElementById('idadeInput').addEventListener('keydown', e => {
+  if (e.key === 'Enter') verificar();
+});
 
-const vacinasPorIdade = {
-  "0m": ["bcg", "hepB"],
-  "2m": ["pentavalente1", "poliomelite1", "pneumo1", "rotavirus1"],
-  "4m": ["pentavalente2", "poliomelite2", "pneumo2", "rotavirus2"],
-  "6m": ["pentavalente3", "poliomelite3", "influenza"],
-  "12m": ["tripliceViral1", "pneumoRef", "meningococicaRef"],
-  "15m": ["dTPreforco", "poliomieliteRef1", "hepA", "tetrasViral", "varicela"],
-  "4a": ["dTPreforco", "poliomieliteRef2", "varicela"],
-  "9a": ["hpvMeninas", "hpvMeninos"],
-  "11a": ["meningococicaACWY", "hepB", "febreAmarela"],
-  "18a": ["trivalente", "hepB", "dTadul", "febreAmarela"],
-  "60a": ["influenza", "pneumococica65", "gripe60"],
-  "65a": ["pneumococica65", "gripe60", "covid"]
-};
-  
-    
-/*informações sobre as vacinas */
-const infoVacinas = {
-  bcg: "Protege contra formas graves de tuberculose, como a meningite tuberculosa e a tuberculose miliar. <div class='idade_indicada'>Idade: ao nascer até 4 anos, 11 meses e 29 dias</div> <div class='locais_disponivel'>Disponível nas Unidades Básicas de Saúde (UBS)</div>",
+function verificar() {
+  const m          = idadeEmMeses();
+  const area       = document.getElementById('resultsArea');
+  const filterArea = document.getElementById('filterArea');
 
-  hepB: "Previne a hepatite B. <div class='idade_indicada'>Idade: ao nascer; pode ser tomada em qualquer idade se não vacinado</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+  // Limpa busca e filtros
+  document.getElementById('searchInp').value = '';
+  setFiltroInterno('todos');
 
-  pentavalente1: "Combina vacinas contra difteria, tétano, coqueluche, hepatite B e Haemophilus influenzae tipo b. <div class='idade_indicada'>Idade: 2 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+  if (m === null) {
+    filterArea.classList.add('hidden');
+    area.innerHTML = emptyHTML('💉', 'Digite sua idade', 'Informe a idade para consultar as vacinas recomendadas.');
+    return;
+  }
 
-  pentavalente2: "Segunda dose da vacina pentavalente. <div class='idade_indicada'>Idade: 4 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+  vacinasResult = VACINAS.filter(v => v.faixas.some(f => m >= f.min && m <= f.max));
 
-  pentavalente3: "Terceira dose da vacina pentavalente. <div class='idade_indicada'>Idade: 6 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+  if (vacinasResult.length === 0) {
+    filterArea.classList.add('hidden');
+    area.innerHTML = emptyHTML('✅', 'Nenhuma vacina específica', 'Consulte sua caderneta ou procure uma UBS próxima para orientações.');
+    return;
+  }
 
-  poliomelite1: "Vacina inativada poliomielite (VIP). <div class='idade_indicada'>Idade: 2 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+  filterArea.classList.remove('hidden');
+  renderResults(m);
+}
 
-  poliomelite2: "VIP, segunda dose. <div class='idade_indicada'>Idade: 4 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+function renderResults(meses) {
+  const area  = document.getElementById('resultsArea');
+  const query = document.getElementById('searchInp').value.toLowerCase();
 
-  poliomelite3: "VIP, terceira dose. <div class='idade_indicada'>Idade: 6 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+  const lista = vacinasResult.filter(v => {
+    const matchTipo = filtroAtivo === 'todos' || v.tipo === filtroAtivo;
+    const matchQ    = !query
+      || v.nome.toLowerCase().includes(query)
+      || v.protege.toLowerCase().includes(query);
+    return matchTipo && matchQ;
+  });
 
-  poliomieliteRef1: "Primeiro reforço com vacina oral (VOP). <div class='idade_indicada'>Idade: 15 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+  if (lista.length === 0) {
+    area.innerHTML = emptyHTML('🔍', 'Nenhuma vacina encontrada', 'Tente outro filtro ou termo de busca.');
+    return;
+  }
 
-  poliomieliteRef2: "Segundo reforço com VOP. <div class='idade_indicada'>Idade: 4 anos</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+  const m = meses !== undefined ? meses : (idadeEmMeses() ?? 0);
 
-  meningococicaC1: "Protege contra meningite meningocócica C. <div class='idade_indicada'>Idade: 3 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+  let html = `
+    <div class="rhead">
+      <div class="rtitle">Vacinas para ${labelIdade(m)}</div>
+      <div class="rcount">${lista.length} encontrada${lista.length !== 1 ? 's' : ''}</div>
+    </div>
+    <div class="vgrid">`;
 
-  meningococicaC2: "Segunda dose. <div class='idade_indicada'>Idade: 5 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+  lista.forEach((v, i) => {
+    html += `
+      <div class="vc ${v.tipo}" style="animation-delay:${i * 0.05}s" data-id="${v.id}" tabindex="0" role="button" aria-label="Ver detalhes: ${v.nome}">
+        <div class="vtype">${v.tipo === 'ob' ? '⬤ Obrigatória' : '⬤ Recomendada'}</div>
+        <div class="vname">${v.nome}</div>
+        <div class="vprot">${v.protege}</div>
+        <div class="vmore">Ver detalhes →</div>
+      </div>`;
+  });
 
-  meningococicaRef: "Reforço da vacina meningocócica C. <div class='idade_indicada'>Idade: 12 meses (até 5 anos se necessário)</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+  html += '</div>';
+  area.innerHTML = html;
 
-  pneumo1: "Vacina pneumocócica 10-valente. <div class='idade_indicada'>Idade: 2 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+  // Delegação de eventos nos cards gerados
+  area.querySelectorAll('.vc').forEach(card => {
+    card.addEventListener('click', () => abrirDrawer(card.dataset.id));
+    card.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') abrirDrawer(card.dataset.id);
+    });
+  });
+}
 
-  pneumo2: "Segunda dose. <div class='idade_indicada'>Idade: 4 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+// Busca em tempo real
+document.getElementById('searchInp').addEventListener('input', () => {
+  const m = idadeEmMeses();
+  if (m !== null) renderResults(m);
+});
 
-  pneumoRef: "Reforço da pneumocócica 10-valente. <div class='idade_indicada'>Idade: 12 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+// Filtros
+document.querySelectorAll('.fpill').forEach(btn => {
+  btn.addEventListener('click', () => {
+    setFiltroInterno(btn.dataset.filtro);
+    const m = idadeEmMeses();
+    if (m !== null) renderResults(m);
+  });
+});
 
-  rotavirus1: "Vacina oral contra rotavírus. <div class='idade_indicada'>Idade: 2 meses (até 15 semanas)</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
+function setFiltroInterno(f) {
+  filtroAtivo = f;
+  document.querySelectorAll('.fpill').forEach(p => {
+    p.classList.toggle('active', p.dataset.filtro === f);
+  });
+}
 
-  rotavirus2: "Segunda dose oral. <div class='idade_indicada'>Idade: 4 meses (até 7 meses e 29 dias)</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
-
-  tripliceViral1: "Protege contra sarampo, caxumba e rubéola. <div class='idade_indicada'>Idade: 12 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
-
-  tripliceViral2: "Segunda dose. <div class='idade_indicada'>Idade: 15 meses (até 4 anos, 11 meses e 29 dias)</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
-
-  hepA: "Previne hepatite A. <div class='idade_indicada'>Idade: 15 meses (até 5 anos incompletos)</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
-
-  tetrasViral: "Combina tríplice viral com varicela. <div class='idade_indicada'>Idade: 15 meses</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
-
-  dT: "Dupla adulto (difteria e tétano). <div class='idade_indicada'>Idade: reforço a cada 10 anos na vida adulta</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
-
-  febreAmarela: "Previne febre amarela. <div class='idade_indicada'>Idade: a partir de 9 meses</div> <div class='locais_disponivel'>Disponível nas UBS e campanhas regionais</div>",
-
-  hpvMeninas: "Previne HPV e câncer de colo do útero. <div class='idade_indicada'>Idade: 9 a 14 anos</div> <div class='locais_disponivel'>Disponível nas UBS e escolas</div>",
-
-  hpvMeninos: "Previne HPV e cânceres genitais. <div class='idade_indicada'>Idade: 11 a 14 anos</div> <div class='locais_disponivel'>Disponível nas UBS e escolas</div>",
-
-  meningococicaACWY: "Contra meningite dos tipos A, C, W e Y. <div class='idade_indicada'>Idade: 11 a 14 anos</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
-
-  dTPreforco: "Reforço da DTP. <div class='idade_indicada'>Idade: 15 meses (até 6 anos, 11 meses e 29 dias)</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
-
-  influenza: "Vacina anual contra gripe. <div class='idade_indicada'>Idade: a partir de 6 meses, grupos prioritários</div> <div class='locais_disponivel'>Disponível nas UBS durante campanhas</div>",
-
-  trivalente: "Reforço da tríplice viral. <div class='idade_indicada'>Idade: crianças, adolescentes e adultos não vacinados</div> <div class='locais_disponivel'>Disponível nas UBS e campanhas</div>",
-
-  hepatiteB: "Reforço ou início de esquema. <div class='idade_indicada'>Idade: qualquer idade</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
-
-  dTadul: "Dupla adulto (difteria e tétano). <div class='idade_indicada'>Idade: reforço a cada 10 anos</div> <div class='locais_disponivel'>Disponível nas UBS</div>",
-
-  pneumococica65: "Protege idosos contra doenças pneumocócicas. <div class='idade_indicada'>Idade: a partir de 60 anos</div> <div class='locais_disponivel'>Disponível nas UBS em campanhas</div>",
-
-  gripe60: "Dose extra anual contra influenza. <div class='idade_indicada'>Idade: a partir de 60 anos</div> <div class='locais_disponivel'>Disponível nas UBS durante campanhas</div>",
-
-  covid: "Protege contra a COVID-19. <div class='idade_indicada'>Idade: conforme orientações vigentes</div> <div class='locais_disponivel'>Disponível nas UBS e centros de vacinação</div>",
-
-  varicela: "Previne catapora. <div class='idade_indicada'>Idade: 15 meses (ou qualquer idade se não vacinado)</div> <div class='locais_disponivel'>Disponível nas UBS</div>"
-};
+function emptyHTML(ico, titulo, texto) {
+  return `
+    <div class="empty">
+      <div class="eico">${ico}</div>
+      <h3>${titulo}</h3>
+      <p>${texto}</p>
+    </div>`;
+}
 
 
+// ── TIMELINE ────────────────────────────────────
+function buildTimeline() {
+  const container = document.getElementById('timelineContainer');
+  if (container.dataset.built) return; // evita rebuild desnecessário
+
+  // Agrupa vacinas por fase
+  const map = {};
+  VACINAS.forEach(v => {
+    if (!map[v.fase]) map[v.fase] = [];
+    map[v.fase].push(v);
+  });
+
+  let html = '';
+
+  FASES.forEach(fase => {
+    const lista = map[fase.label];
+    if (!lista) return;
+
+    html += `
+      <div class="tl-phase">
+        <div class="tl-phase-head">
+          <div class="tl-phase-ico" style="background:${fase.bg}">${fase.emoji}</div>
+          <div>
+            <div class="tl-phase-title">${fase.label}</div>
+            <div class="tl-phase-sub">${fase.sub}</div>
+          </div>
+        </div>
+        <div class="tl-items">`;
+
+    lista.forEach(v => {
+      html += `
+        <div class="tl-item" data-id="${v.id}" tabindex="0" role="button" aria-label="Ver detalhes: ${v.nome}">
+          <div class="tl-dot ${v.tipo}"></div>
+          <div class="tl-info">
+            <div class="tl-name">${v.nome}</div>
+            <div class="tl-prot">${v.protege}</div>
+          </div>
+          <span class="tl-arr">→</span>
+        </div>`;
+    });
+
+    html += `</div></div>`;
+  });
+
+  container.innerHTML = html;
+  container.dataset.built = '1';
+
+  // Eventos
+  container.querySelectorAll('.tl-item').forEach(item => {
+    item.addEventListener('click', () => abrirDrawer(item.dataset.id));
+    item.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') abrirDrawer(item.dataset.id);
+    });
+  });
+}
+
+
+// ── CADERNETA ───────────────────────────────────
+function buildCaderneta() {
+  renderCaderneta();
+}
+
+function renderCaderneta() {
+  const total  = VACINAS.length;
+  const tomadas = Object.values(caderneta).filter(Boolean).length;
+  const pct    = Math.round((tomadas / total) * 100);
+
+  document.getElementById('progressArea').innerHTML = `
+    <div class="prog-label">
+      <span>${tomadas} de ${total} vacinas registradas</span>
+      <span>${pct}%</span>
+    </div>
+    <div class="progress-bar-wrap">
+      <div class="progress-bar-fill" style="width:${pct}%"></div>
+    </div>`;
+
+  let html = '';
+  VACINAS.forEach(v => {
+    const checked = caderneta[v.id] || false;
+    html += `
+      <div class="cad-row ${checked ? 'checked' : ''} ${v.tipo === 'ob' ? 'obType' : 'recType'}"
+           data-id="${v.id}" tabindex="0" role="checkbox" aria-checked="${checked}"
+           aria-label="${v.nome}">
+        <div class="cad-check">${checked ? '✓' : ''}</div>
+        <div class="cad-row-name">${v.nome}</div>
+        <div class="cad-row-type">${v.tipo === 'ob' ? 'Obrigatória' : 'Recomendada'}</div>
+      </div>`;
+  });
+
+  const list = document.getElementById('cadList');
+  list.innerHTML = html;
+
+  list.querySelectorAll('.cad-row').forEach(row => {
+    row.addEventListener('click', () => toggleCad(row.dataset.id));
+    row.addEventListener('keydown', e => {
+      if (e.key === 'Enter' || e.key === ' ') toggleCad(row.dataset.id);
+    });
+  });
+}
+
+function toggleCad(id) {
+  caderneta[id] = !caderneta[id];
+  renderCaderneta();
+}
+
+
+// ── DRAWER ──────────────────────────────────────
+function abrirDrawer(id) {
+  const v = VACINAS.find(x => x.id === id);
+  if (!v) return;
+
+  // Tipo e cor
+  const isOb = v.tipo === 'ob';
+  document.getElementById('dType').textContent  = isOb ? '● Obrigatória' : '● Recomendada';
+  document.getElementById('dType').style.color  = isOb ? 'var(--obrig)' : 'var(--recom)';
+  document.getElementById('dTitle').textContent = v.nome;
+
+  const pills = v.doses
+    .map(d => `<span class="dpill">${d}</span>`)
+    .join('');
+
+  document.getElementById('dBody').innerHTML = `
+    <div class="iblock">
+      <div class="iblabel">Protege contra</div>
+      <p>${v.protege}</p>
+    </div>
+    <div class="iblock">
+      <div class="iblabel">Doses</div>
+      <div class="dose-pills">${pills}</div>
+    </div>
+    <div class="iblock">
+      <div class="iblabel">Recomendação</div>
+      <p>${v.rec}</p>
+    </div>
+    <div class="iblock">
+      <div class="iblabel">Fase de aplicação</div>
+      <p>${v.fase}</p>
+    </div>
+    <div class="sus-badge-d">
+      <span class="sus-ico">🏥</span>
+      <div>
+        <strong>Disponível no SUS</strong>
+        Gratuitamente em todas as UBS do Brasil
+      </div>
+    </div>`;
+
+  document.getElementById('drawer').classList.add('open');
+  document.getElementById('drawer').setAttribute('aria-hidden', 'false');
+  document.getElementById('overlay').classList.add('open');
+  document.getElementById('btnFechar').focus();
+}
+
+function fecharDrawer() {
+  document.getElementById('drawer').classList.remove('open');
+  document.getElementById('drawer').setAttribute('aria-hidden', 'true');
+  document.getElementById('overlay').classList.remove('open');
+}
+
+// Fechar ao clicar no overlay ou no botão
+document.getElementById('overlay').addEventListener('click', fecharDrawer);
+document.getElementById('btnFechar').addEventListener('click', fecharDrawer);
+
+// Fechar com ESC
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') fecharDrawer();
+});
